@@ -12,7 +12,8 @@ import numpy as np
 
 SAVE = False
 
-def make_mask (ny,nx, msize=8):
+def make_mask (ny,nx, msize=8, nmask = 1):
+    assert nmask==1,'nmask different of 1 not implemented yet'
     x = np.random.randint(0,nx-msize)
     y = np.random.randint(0,ny-msize)
     mask = np.zeros((ny,nx),dtype=bool)

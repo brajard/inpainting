@@ -15,6 +15,9 @@
 - check the options (e.g. king of masking)
 2) run the file in a terminal: `./make-trainset.py`
 3) Check some randomly picked images in `./figures/examples/[TNAME]`
+Note : you can always have a look at all the `.nc` files using the
+software `ncview`
+
 
 ## Train a first network
 1) In file `Inpainting.py`:
