@@ -1,6 +1,25 @@
 # inpainting
 
 ## Prerequisites
+Python modules to be installed. Advice : use conda env
+```
+conda create -n nn python=3.5
+source activate nn
+pip install netCDF4 h5py numpy scipy matplotlib xarray tensorflow keras scikit-learn
+```
+Regarding tensorflow, you can have a more specific installation looking at the website:
+<https://www.tensorflow.org/install/>
+
+You have to set keras config file (generally at `~/.keras/keras.json`)
+```
+{
+    "image_data_format": "channels_last", 
+    "epsilon": 1e-07, 
+    "floatx": "float32", 
+    "backend": "tensorflow"
+}
+```
+
 
 ## Download data
 1) download data in `./data` folder
