@@ -2,36 +2,65 @@
 # -*- coding: utf-8 -*-
 """
 Created on Fri Feb 23 15:31:46 2018
-
+script python to plot some outpus of the model
 @author: jbrlod
 """
-
-from baseutil import dataset
-ds = dataset(basename='../data/trainingset-small.nc')
-from keras.models import load_model
-from modelutil import masked_mse
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import shutil
+import xarray as xr
+from baseutil import dataset
 
-SAVE= True
+#change  the trainingset name  if necessary (can be a testing dataset)
+trainingname = 'training-small.nc'
 
-name = 'model_7layers'
+#data directory
+datadir = '../data'
+ds = dataset(basename=os.path.join(datadir, trainingname))
 
-model = load_model(name,custom_objects={'masked_mse':masked_mse})
+from keras.models import load_model
+from modelutil import masked_mse
 
-ypredict = model.predict(ds.X).squeeze()
+# name of the neural networks
+name = 'model_2layers'
 
-nim = 20
-ii = np.random.randint(0,ds._n,nim)
-vmin, vmax = -1.5,1
-outdir = '../figures/examples_app'
-for i,ind in enumerate(ii):
-    fig, axes= plt.subplots(ncols=3)
-    axes[0].imshow(np.log10(ds.Xmasked[ind]),vmin=vmin,vmax=vmax)
-    axes[1].imshow(np.log10(ds.ymasked()[ind]),vmin=vmin,vmax=vmax)
-    axes[2].imshow(np.log10(ds.ymasked(ypredict)[ind]),vmin=vmin,vmax=vmax)
-    title = 'Image_' + str(int(ds._trainingset.index[ind]))
-    plt.suptitle(title)
-    if SAVE:
-        plt.savefig(os.path.join(outdir,title+'.png'))
+# outputname
+outname = 'dataset_nn.nc'
+
+model = load_model(os.path.join(datadir,name),
+                   custom_objects={'masked_mse':masked_mse})
+
+ypredict = xr.DataArray(model.predict(ds.X),coords=ds.yt.coords)
+
+#save prediction
+dsout = xr.Dataset({'X':ds.X,'yt':ds.yt,'ypredict':ypredict})
+dsout.to_netcdf(os.path.join(datadir,outname))
+
+#plot some random images
+PLOT = True
+
+#save the images
+SAVE = True
+
+if PLOT:
+    # example dir
+    exampledir = os.path.join('../figures/examples/',os.path.splitext(name)[0])
+    shutil.rmtree(exampledir,ignore_errors=True) 
+
+    os.makedirs(exampledir)
+    
+    nim = 20 #number of images to be plot
+    ii = np.random.randint(0,dsout.index.size,nim)
+    vmin, vmax = -1.5,1
+
+    for i,ind in enumerate(ii):
+        fig, axes= plt.subplots(ncols=3)
+        axes[0].imshow(np.log10(dsout.X[ind].squeeze()),vmin=vmin,vmax=vmax)
+        axes[1].imshow(np.log10(dsout.yt[ind].squeeze()),vmin=vmin,vmax=vmax)
+        axes[2].imshow(np.log10(dsout.ypredict[ind].squeeze()),vmin=vmin,vmax=vmax)
+        title = 'Image_' + str(int(dsout.index[ind]))
+        plt.suptitle(title)
+        if SAVE:
+            plt.savefig(os.path.join(exampledir,title+'.png'))
+
