@@ -14,7 +14,7 @@ datadir = '../data'
 
 ds = dataset(basename=os.path.join(datadir, trainingname))
 #for unknown reasons, it seems to work better if dataset is instaciated
-#before importing keras
+# before importing keras
 from modelutil import get_model_2layers
 
 
