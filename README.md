@@ -1,4 +1,4 @@
-# inpainting
+# Inpainting
 
 ## Prerequisites
 Python modules to be installed. Advice : use conda env
