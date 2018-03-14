@@ -27,6 +27,16 @@ name = 'model_2layers'
 img_rows, img_cols = ds.X.shape[1:3]
 
 model = get_model_2layers(img_rows, img_cols)
-model.fit(ds.X, ds.yt, epochs=10)
+print(model.summary())
+history = model.fit(ds.X, ds.yt, epochs=50)
 
 model.save(os.path.join(datadir, name))
+
+fig = plt.figure()
+plt.plot(history.history['loss'])
+title = 'Loss'
+plt.title('loss')
+plt.xlabel('epoch')
+plt.show()
+plt.suptitle(title)
+fig.savefig(os.path.join(outdir,title+'.png'))
