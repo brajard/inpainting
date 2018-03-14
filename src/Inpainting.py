@@ -13,9 +13,11 @@ trainingname = 'training-small.nc'
 datadir = '../data'
 
 ds = dataset(basename=os.path.join(datadir, trainingname))
+
+#%%
 #for unknown reasons, it seems to work better if dataset is instaciated
 # before importing keras
-from modelutil import get_model_2layers
+from modelutil import get_model_2layers,get_model_3layers
 
 
 # name of the neural networks
