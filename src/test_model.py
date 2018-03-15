@@ -23,7 +23,7 @@ from keras.models import load_model
 from modelutil import masked_mse
 
 # name of the neural networks
-name = 'model_2layers'
+name = 'model_4layers'
 
 # outputname
 outname = 'dataset_nn.nc'
@@ -33,8 +33,12 @@ model = load_model(os.path.join(datadir,name),
 
 ypredict = xr.DataArray(model.predict(ds.X),coords=ds.yt.coords)
 
+#generate a combinated image of original & predicted images
+isCloud = np.equal(ds.X,0)
+yfinal = (1-isCloud)*ds.X + isCloud*ypredict
+
 #save prediction
-dsout = xr.Dataset({'X':ds.X,'yt':ds.yt,'ypredict':ypredict})
+dsout = xr.Dataset({'X':ds.X,'yt':ds.yt,'ypredict':ypredict,'yfinal':yfinal})
 dsout.to_netcdf(os.path.join(datadir,outname))
 
 #plot some random images
