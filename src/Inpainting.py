@@ -5,6 +5,7 @@ Script python to make a training
 """
 import os
 from baseutil import dataset
+import matplotlib.pyplot as plt
 
 #change  the trainingset name  if necessary
 trainingname = 'training-small.nc'
