@@ -18,16 +18,16 @@ ds = dataset(basename=os.path.join(datadir, trainingname))
 #%%
 #for unknown reasons, it seems to work better if dataset is instaciated
 # before importing keras
-from modelutil import get_model_2layers,get_model_3layers
+from modelutil import get_model_2layers,get_model_3layers,get_model_4layers
 
 
 # name of the neural networks
-name = 'model_2layers'
+name = 'model_4layers'
 
 #dimension of input data
 img_rows, img_cols = ds.X.shape[1:3]
 
-model = get_model_2layers(img_rows, img_cols)
+model = get_model_4layers(img_rows, img_cols)
 print(model.summary())
 history = model.fit(ds.X, ds.yt, epochs=50)
 

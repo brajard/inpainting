@@ -23,7 +23,7 @@ from keras.models import load_model
 from modelutil import masked_mse
 
 # name of the neural networks
-name = 'model_2layers'
+name = 'model_4layers'
 
 # outputname
 outname = 'dataset_nn.nc'
