@@ -11,14 +11,27 @@ import numpy as np
 
 
 SAVE = False
+def nan_counter(ny,nx,dst,ind1,dy, dx, msize, min_MaskInvPixel):
+    x = np.random.randint(dx,(nx-(msize+dx)))
+    y = np.random.randint(dy,(ny-(msize+dy)))
+    pix_max = np.array(dst.chla[ind1,y:y+msize, x:x+msize], dtype='float')
+    a = np.reshape(pix_max, (1, msize*msize))
+    max_MaskInvPixel = np.sum(np.isnan(a))
+    return max_MaskInvPixel, x, y
 
-def make_mask (ny,nx, msize=8, nmask = 1):
+def make_mask (ny,nx,dst,ind1, dy=0,dx=0 ,msize=8, nmask = 1, min_MaskInvPixel=3 ):
     assert nmask==1,'nmask different of 1 not implemented yet'
-    x = np.random.randint(0,nx-msize)
-    y = np.random.randint(0,ny-msize)
-    mask = np.zeros((ny,nx),dtype=bool)
-    mask[y:y+msize,x:x+msize] = True
-    return (mask)
+    max_MaskInvPixel,x ,y = nan_counter(ny,nx,dst,ind1,dy, dx, msize, min_MaskInvPixel)
+    count =0
+    while (max_MaskInvPixel > min_MaskInvPixel) and (count<30):
+        max_MaskInvPixel,x,y = nan_counter(ny,nx,dst,ind1,dy, dx, msize, min_MaskInvPixel)
+        count = count+1;
+        
+    a_mask = np.zeros((ny,nx),dtype=bool)  # initialisation du trainig mask
+    a_mask[y:(y+msize), x:(x+msize)] = True
+    c_mask = np.ones((ny,nx),dtype=bool)   # initialisation du contextual mask
+    c_mask[(y-dy):(y+msize+dy), (x-dx):(x+msize+dx)] = False
+    return a_mask, c_mask , x, y
 
 
 
@@ -53,12 +66,30 @@ class dataset:
         self._X = np.ma.masked_invalid(self._base[self._fname])
         self._yt = np.ma.masked_invalid(self._base[self._fname])
         self._amask = np.zeros(self._X.shape,dtype=bool)
+        self._cmask = np.zeros(self._yt.shape,dtype=bool)
         if self._crop>0:
             self._yt = self._yt[:,self._crop:-self._crop,self._crop:-self._crop]
         for i in range(self._X.shape[0]):
             m = mfun(self._ny,self._nx,**margs)
             self._X[i,m] = np.ma.masked
             self._amask[i,:,:] = m 
+            
+    def masking2(self, mfun=make_mask, **margs):
+        self._X = np.ma.masked_invalid(self._base[self._fname])
+        self._yt = np.ma.masked_invalid(self._base[self._fname])
+        self._amask = np.zeros(self._X.shape,dtype=bool)  # definition du training mask
+        self._cmask = np.zeros(self._yt.shape,dtype=bool) # definition du contextual mask
+        self._xVect = []; self._yVect = []
+        if self._crop>0:
+            self._yt = self._yt[:,self._crop:-self._crop,self._crop:-self._crop]
+        for i in range(self._X.shape[0]):           
+            a_m, c_m,x,y = mfun(self._ny, self._nx,self._base, i, **margs)
+            self._X[i,a_m] = np.ma.masked
+            self._amask[i,:,:] = a_m
+            self._yt[i,c_m] = np.ma.masked
+            self._cmask[i,:,:] = c_m 
+            self._xVect.append(x); self._yVect.append(y)
+        return self._xVect, self._yVect
             
     def savebase(self,basename=None):
         if basename is None:
@@ -68,14 +99,14 @@ class dataset:
         
         self._trainingset = xr.Dataset({'X':(['index','y','x'],self._X),
                                        'yt':(['index','y','x'],self._yt),
-                                       'amask':(['index','y','x'],self._amask)},
+                                       'amask':(['index','y','x'],self._amask),
+                                       'cmask':(['index','y','x'],self._cmask)},
                                         coords = self._base.coords)  
         self._trainingset.to_netcdf(basename)
     
     @property
     def X(self):
-        X = self._X.expand_dims('canal',3).fillna(0)
-        
+        X = self._X.expand_dims('canal',3).fillna(0)   
         return X
  
     @property
@@ -89,8 +120,7 @@ class dataset:
     
     @property
     def yt(self):
-        yt = self._yt.expand_dims('canal',3).fillna(self._nanval)
-        
+        yt = self._yt.expand_dims('canal',3).fillna(self._nanval)       
         return yt
 
 if __name__  == "__main__":
