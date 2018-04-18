@@ -5,7 +5,7 @@ Python modules to be installed. Advice : use conda env
 ```
 conda create -n nn python=3.5
 source activate nn
-pip install netCDF4 h5py numpy scipy matplotlib xarray tensorflow keras scikit-learn
+pip install netCDF4 h5py numpy scipy matplotlib xarray tensorflow keras scikit-learn scikit-gstat
 ```
 Regarding tensorflow, you can have a more specific installation looking at the website:
 <https://www.tensorflow.org/install/>
