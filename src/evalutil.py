@@ -221,6 +221,10 @@ def power_spectrum(inputTestName, outputTestName, cb=True,plot = True):
                 ax[0].imshow(np.log10(chla_final[ind,:,:]))
                 ax[1].imshow(np.log10(np.array(PSD2D[ind])))
                 ax[2].plot(PSD1D[ind])
+                ax[2].set_xscale('log', basex=2)
+                ax[2].set_yscale('log', basey=2)
+                ax[2].set(xlabel='Spatial Frequency', ylabel = "log2(power Spectrum)")
+                
         
     elif cb == False :   
         CHLAFC , chla_finalV = inpainted_region(inputTestName, outputTestName)
@@ -247,6 +251,9 @@ def power_spectrum(inputTestName, outputTestName, cb=True,plot = True):
                 ax[0].imshow(np.array(CHLAFC[ind]))
                 ax[1].imshow(np.log10( np.array(PSD2D[ind]) ))
                 ax[2].plot(PSD1D[ind])
+                ax[2].set_xscale('log', basex=2)
+                ax[2].set_yscale('log', basey=2)
+                ax[2].set(xlabel='Spatial Frequency', ylabel = "log2(power Spectrum)")
         
     else :
         print("cb est un booléen ! ")
