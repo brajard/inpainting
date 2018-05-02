@@ -7,12 +7,12 @@ Created on Mon Apr 23 14:30:04 2018
 import os
 import xarray as xr
 import numpy as np
-from evalutil import power_spectrum, test_rmse, test_corrcoef, test_varratio
+from evalutil import power_spectrum, test_rmse, test_corrcoef, test_varratio, mask_apply_crop, inpainted_region
 import matplotlib.pyplot as plt
 
 # CHOIX DU DATASET A TRAITER
 AllInputDs = ["cl1", "sq1", "sq2"] # cl1 : cloud ; sq1: nauge carré ; sq2 : nuage carré centré
-inputds = AllInputDs[0]
+inputds = AllInputDs[2]
 
 # TEST_SET_NAME & WEIGHTS BASENAME & DATA DIRECTORY
 if (inputds == AllInputDs[0]):             ## cloud 
@@ -40,7 +40,7 @@ elif (inputds == AllInputDs[1]):           ## plusieurs carrés
     outdir = '../figures/examples/BaseTest_Square1'
     
 elif (inputds == AllInputDs[2]):           ## square 2 : nuage 'carré' centré
-    TestName =    'BaseTest_Square2.nc'
+    InTestName =    'BaseTest_Square2.nc'
     weightsName = 'weights_square2.nc'
     OutTestName = 'datasetNN_Square2.nc'
     rmseFileName = 'rmse_square2.npy'
@@ -73,7 +73,7 @@ Amask = np.array(inputTest.amask, dtype = int)
 index = np.array(outputTest.index).tolist() # Index des images 
 # initialisation des listes 
 RMSE = []; CORRCOEF = []; mevalCrop = []; VARRATIO = []
-VTM = [] ; VPM =[]
+CHLAPMC = []; CHLATMC = []
 for j,ind in enumerate(index):
     ytrue = outputTest.yt[j].values.squeeze()
     if ytrue.shape[0]>2:
@@ -90,48 +90,61 @@ for j,ind in enumerate(index):
     corr_coef = test_corrcoef(ytrue,ypred)
     CORRCOEF.append(corr_coef)
     # Calcul du rapport de variance
-    varratio, vpm, vtm = test_varratio(ytrue, ypred, bool1=False)
-    VTM.append(vtm); VPM.append(vpm)
+    varratio, _, _ = test_varratio(ytrue, ypred, bool1=False)
     VARRATIO.append(varratio)
-    
+    # Récuperation des valeurs prédites (completées)
+    _, _, ytr_mc, ypr_mc  = mask_apply_crop(ytrue, ypred, cwidth=16, cheight=16, cb=True)
+    if ypr_mc.shape[0]>0:
+            CHLAPMC.extend(ypr_mc)
+            CHLATMC.extend(ytr_mc)
+
+# Sauvegarde des données   
 np.save(os.path.join(datadir,rmseFileName), np.array(RMSE))
 np.save(os.path.join(datadir,corrcoefFileName), np.array(CORRCOEF))
 np.save(os.path.join(datadir,varRatioFileName), np.array(VARRATIO))
 
-# %% Calcul du spectre de puissance et Visulaisation
-PSD2D, PSD1D = power_spectrum(inputTestName, outputTestName, cb=True, plot = True)    
+# VISUALISATION 
+# 1°) Scatter plot: Chla Predict vs Chla True
+plt.figure('Chla predict vs Chla true original')
+plt.scatter(np.log10(CHLATMC), np.log10(CHLAPMC), c='black')
+plt.xlabel('Chla Réel',fontsize=14); plt.ylabel('Chla Prédit', fontsize=14)
+plt.xlim(-2, 0.7); plt.ylim(-1.6, 0.2)
+plt.title('Chla predict vs Chla true', fontsize=14)
+plt.plot(range(-2,2),range(-2,2),'-r',linewidth=2.5)
+plt.savefig(os.path.join(outdir,'ytrue_vs_ypred.png'))
 
-# %% Visualisation images de réference : % Author : arimoux %
+# 2°) Histogramme des erreurs : écarts entre données prédites et réelles
+plt.figure('histogramme des erreurs entre Chla pred et Chla true')
+c = np.subtract(CHLAPMC,CHLATMC);
+#plt.hist(c, bins=np.arange(-0.1,0.1,0.003), alpha=0.5)
+plt.hist(c, bins=300, alpha=0.5)
+plt.xlim(-0.10, 0.10); #plt.ylim(-1.6, 0.2)
+plt.xlabel('Error chlaPred-ChlaTrue',fontsize=14)
+plt.ylabel('Frequency',fontsize=14)
 
-index = [27,66,85,87,88,107,112,113]
+# %% Calcul du spectre de puissance et Visualisation
+PSD2D, PSD1D = power_spectrum(outputTestName, cb=True, plot = True)
+
+# %% Visualisation images de réference
+
+index = [27,66,85,87,88,107,112,113] # index des images à visualiser 
 # parameters for figures
 SAVE = False
-for i,ind in enumerate(index):
-    vmin, vmax = -1,0       # -1.5,1
-    plot_full=True
-    plot_square=True
-    plot_hist = True
-    
-    nanval = -1e5
-    isNotSquare = np.equal(outputTest.yt[ind,:,:],nanval)
-    yt0 = (1-isNotSquare)*outputTest.yt[ind,:,:]
-    yt0 = yt0.values
-    yp0 = (1-isNotSquare)*outputTest.ypredict[ind,:,:]
-    yp0 = yp0.values
-    xi,yi,zi = np.nonzero(yt0)
-    yts = yt0[xi[0]:xi[-1],yi[0]:yi[-1]]
-    yps = yp0[xi[0]:xi[-1],yi[0]:yi[-1]]
-    
-    yt_full = isNotSquare*outputTest.X[ind] + (1-isNotSquare)*outputTest.yt[ind]
-    
-    
+plot_full=True
+plot_square=True
+plot_hist = True
+vmin, vmax = -1,0
+
+CHLAPC, CHLATC, chla_pred, CHLATRFULL = inpainted_region(outputTestName, y1='ypred',nanval=-1e5, forspec=False)
+
+for i,ind in enumerate(index):  
     if plot_full:
         fig, axes= plt.subplots(ncols=3)
         im0=axes[0].imshow(np.log10(outputTest.X[ind].squeeze()),vmin=vmin,vmax=vmax)
         axes[0].set_title("Input image",fontsize=14)
-        im1=axes[1].imshow(np.log10(yt_full.squeeze()),vmin=vmin,vmax=vmax)
+        im1=axes[1].imshow(np.log10( CHLATRFULL[ind,:,:]),vmin=vmin,vmax=vmax)
         axes[1].set_title("True Image",fontsize=14)
-        im2=axes[2].imshow(np.log10(outputTest.yfinal[ind].squeeze()),vmin=vmin,vmax=vmax)
+        im2=axes[2].imshow(np.log10(outputTest.yfinal[ind].values.squeeze()),vmin=vmin,vmax=vmax)
         axes[2].set_title("Inpainted Image",fontsize=14)
         cbar_ax = fig.add_axes([0.15, 0.12, 0.7, 0.07])
         cb=fig.colorbar(im1, cax=cbar_ax,orientation='horizontal')
@@ -145,9 +158,9 @@ for i,ind in enumerate(index):
     
     if plot_square:
         fig, axes= plt.subplots(ncols=2)
-        im0=axes[0].imshow(np.log10(yts.squeeze()),vmin=vmin,vmax=vmax)
+        im0=axes[0].imshow(np.log10(np.array(CHLATC[ind])),vmin=vmin,vmax=vmax)
         axes[0].set_title("True image",fontsize=14)
-        im1=axes[1].imshow(np.log10(yps.squeeze()),vmin=vmin,vmax=vmax)
+        im1=axes[1].imshow(np.log10(np.array(CHLAPC[ind])),vmin=vmin,vmax=vmax)
         axes[1].set_title("Inpainted Image",fontsize=14)
         cbar_ax = fig.add_axes([0.15, 0.12, 0.7, 0.07])
         cb=fig.colorbar(im1, cax=cbar_ax,orientation='horizontal')
