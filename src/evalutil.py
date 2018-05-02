@@ -10,7 +10,7 @@ from sklearn.metrics import mean_squared_error as rmse1
 import numpy as np
 import xarray as xr
 import numpy.core.numeric as _nx
-from numpy.core.numeric import  isnan
+from numpy.core.numeric import isnan
 from numpy import isneginf, isposinf
 from copy import copy
 import matplotlib.pyplot as plt 
@@ -41,7 +41,7 @@ def mask_apply(y_true, y_pred):
     y_pred_m = y_pred[y_true != 0]
     return y_true, y_pred, y_true_m, y_pred_m
 
-def mask_apply_crop(y_true, y_pred, cwidth, cheight, cb):
+def mask_apply_crop(y_true, y_pred, cwidth=16, cheight=16, cb=True):
     """ Cette fonction est utilisée uniquement à l'étape d'évaluation des performances
     du réseau (Phase de Post-traitement).
     Cette fonction permet de selectionner les ytrue et ypred qu'on 
@@ -64,43 +64,100 @@ def mask_apply_crop(y_true, y_pred, cwidth, cheight, cb):
     if (cb == True):
         bigmask = np.zeros(shape=(64,64))
         bigmask[cwidth:-cwidth, cheight:-cheight] = 1  
-        isMask1 = isMask * bigmask
+        isMask = np.multiply(isMask, bigmask)
     elif (cb == False):
         bigmask = np.ones(shape=(64,64))
         bigmask[cwidth:-cwidth, cheight:-cheight] = 0  
-        isMask1 = isMask * bigmask   
+        isMask = np.multiply(isMask, bigmask)   
     # Application du masque sur 
-    y_true = y_true * isMask1
-    y_pred = y_pred * isMask1
+    y_true = y_true * isMask
+    y_pred = y_pred * isMask
     y_true_m = y_true[y_true != 0]
     y_pred_m = y_pred[y_true != 0]
     return y_true, y_pred, y_true_m, y_pred_m
 
 
-def test_masked_mse(y_true, y_pred, amask, nmask, dx=2, dy=0, coefC=0.1, coefN=1 ):
+def test_rmse(y_true, y_pred, amask, nmask, dx=2, dy=0, coefC=0.1, coefN=1, cbool =True, cwidth=16, cheight=16 ):
     """ Calcul du loss par root mean square (sklearn) en attribuant des coefficients
     de pondération différents: 
-    - coefN pour le contour extrait par nmask (neighbor mask) et 
-    - coefC pour la région à completer, extraite par amask. """
-    #data\cloud
-    ytr, ypr, y_tr_m, y_pr_m = mask_apply(y_true,y_pred)
+        - y_true and y_pred are numpy arrays
+        - coefN pour le contour extrait par nmask (neighbor mask) et 
+        - coefC pour la région à completer, extraite par amask. 
+        - cbool = True: stands for using all values of the reconstructed area
+        - cbool = False stands for using values of the validation area """
+    ytr, ypr, ytr_m, ypr_m = mask_apply(y_true,y_pred)
     if (dx==0 and dy==0):
-        mseLoss = rmse1(y_tr_m, y_pr_m)
+        mseLoss = rmse1(ytr_m, ypr_m)
     elif (dx>0 or dy>0):
         if nmask.ndim>2:
             nmask = np.squeeze(nmask)
-        nmask = np.logical_not(nmask) # Cette transformation permet de 
-        LossC = rmse1(ytr*amask, ypr*amask)
-        LossN = rmse1(ytr*nmask, ypr*nmask)
-        mseLoss = coefC*LossC + coefN*LossN
+        if amask.ndim>2:
+            amask = np.squeeze(amask)
+        if cbool == True:
+            nmask = np.logical_not(nmask)  
+            LossC = rmse1(np.multiply(ytr,amask), np.multiply(ypr,amask))
+            LossN = rmse1(np.multiply(ytr,nmask), np.multiply(ypr,nmask))
+            mseLoss = coefC*LossC + coefN*LossN
+        elif cbool == False : 
+            bigmask = np.zeros(shape=(64,64))
+            bigmask[cwidth:-cwidth, cheight:-cheight] = 1
+            nmask = np.logical_not(nmask)
+            nmask = np.multiply(nmask,bigmask)
+            amask = np.multiply(amask,bigmask)
+            isnmask = nmask[nmask!=0]; isamask = amask[amask!=0]
+            if (isnmask.shape[0]>0 and isamask.shape[0]>0):
+                LossC = rmse1(ytr*amask, ypr*amask)
+                LossN = rmse1(ytr*nmask, ypr*nmask)
+                mseLoss = coefC*LossC + coefN*LossN
+            elif (isnmask.shape[0]==0 and isamask.shape[0]>0):
+                LossC = rmse1(ytr*amask, ypr*amask)
+                mseLoss = coefC*LossC
+            elif (isnmask.shape[0]>0 and isamask.shape[0]==0):
+                LossN = rmse1(ytr*nmask, ypr*nmask)
+                mseLoss = coefN*LossN
+            elif (isnmask.shape[0]==0 and isamask.shape[0]==0):
+                mseLoss= None    # Attention aux "None" dans l'exploitation des résultats?
     return mseLoss
 
-def test_masked_corrcoef(y_true,y_pred):
+def test_corrcoef(y_true,y_pred, bool1 =True):
     """calcul du coefficient de correlation entre chla predict et chla true 
-    du carré imputé par le reseau de neurones profond. """
-    ytr, yp, y_tr_m, y_pr_m = mask_apply(y_true,y_pred)
-    CorrCoef = np.corrcoef(y_tr_m, y_pr_m, bias=True)[0][1]
+    du carré imputé par le reseau de neurones profond.
+    - y_true and y_pred are numpy arrays
+    - bool = True: stands for using all values of the reconstructed area
+    - bool = False stands for using values of the validation area """
+    if bool1 == True:
+        _, _, ytr_m, ypr_m = mask_apply(y_true,y_pred)
+        CorrCoef = np.corrcoef(ytr_m, ypr_m, bias=True)[0][1]
+    elif bool1 == False:
+        _, _, ytr_mc, ypr_mc  = mask_apply_crop(y_true, y_pred, cwidth=16, cheight=16, cb=True)
+        if ytr_mc.shape[0]>0:
+            CorrCoef = np.corrcoef(ytr_mc, ypr_mc, bias=True)[0][1]
+        elif ytr_mc.shape[0]==0:
+            CorrCoef = None      # Attention aux "None" dans l'exploitation des résultats?
     return CorrCoef
+
+def test_varratio(y_true,y_pred, bool1 =True):
+    """calcul du rapport de variance entre chla predict et chla true 
+    du carré imputé par le réseau de neurones profond.
+    - y_true and y_pred are numpy arrays
+    - cbool = True: stands for using all values of the reconstructed area
+    - cbool = False stands for using values of the validation area """
+    if bool1 == True:
+        _, _, chlaTrm, chlaPrm = mask_apply(y_true,y_pred)
+        vtm = np.var(chlaTrm, dtype=np.float64)
+        vpm = np.var(chlaPrm, dtype=np.float64)
+        VarRatio =  np.divide(vtm,vpm)
+    elif bool1 == False:
+        _, _, chlaTrmc, chlaPrmc  = mask_apply_crop(y_true, y_pred, cwidth=16, cheight=16, cb=True)
+        if chlaTrmc.shape[0]>0:
+            vtm = np.var(chlaTrmc, dtype=np.float64)
+            vpm = np.var(chlaPrmc, dtype=np.float64)
+            VarRatio = np.divide(vtm,vpm)
+        if chlaTrmc.shape[0]==0:
+            VarRatio = None      # Attention aux "None" dans l'exploitation des résultats?
+            vpm = None; vtm = None
+    return VarRatio, vpm, vtm
+
 
 def test_pixel_masked_loss(y_true, y_pred):
     ytrue, ypred, ytrue_m, ypred_m = mask_apply(y_true,y_pred)
@@ -225,7 +282,6 @@ def power_spectrum(inputTestName, outputTestName, cb=True,plot = True):
                 ax[2].set_yscale('log', basey=2)
                 ax[2].set(xlabel='Spatial Frequency', ylabel = "log2(power Spectrum)")
                 
-        
     elif cb == False :   
         CHLAFC , chla_finalV = inpainted_region(inputTestName, outputTestName)
         for i in range(chla_finalV.shape[0]):
@@ -254,11 +310,9 @@ def power_spectrum(inputTestName, outputTestName, cb=True,plot = True):
                 ax[2].set_xscale('log', basex=2)
                 ax[2].set_yscale('log', basey=2)
                 ax[2].set(xlabel='Spatial Frequency', ylabel = "log2(power Spectrum)")
-        
     else :
         print("cb est un booléen ! ")
     return PSD2D, PSD1D
-
 
 
 def getmaxmin(t):
@@ -318,8 +372,7 @@ def index_search(ytrue,maskds):
     YTvaluesm = YTvalues[np.where(YTvalues!=nanval)]
     comp = np.array_equal(ytruem, YTvaluesm);
     if comp==True:
-        ind11 = count
-        
+        ind11 = count 
     elif comp==False: 
         while (comp==False and count<-1+maskds.X.values.shape[0]):
             count+=1
