@@ -8,19 +8,21 @@ classes and utils for dealing with training dataset
 import os
 import xarray as xr
 import numpy as np
+
 from random import randint
 import skimage
 import skimage.morphology
 from copy import copy
 
 SAVE = False
+
 def nan_counter(ny,nx,dst,ind1, delta, lim, msize, min_MaskInvPixel):
     x = randint(lim,(nx-(msize+2*delta+lim)))
     y = randint(lim,(ny-(msize+2*delta+lim)))
     pix_max = np.array(dst.chla[ind1,y:y+msize, x:x+msize], dtype='float')
     a = np.reshape(pix_max, (1, msize*msize))
     max_MaskInvPixel = np.sum(np.isnan(a))
-    return max_MaskInvPixel, x, y
+    return max_MaskInvPixel, x,y
 
 def make_mask_squares(ny,nx,dst,ind1, delta=2, lim=0, msize=8, nmask = 5, min_MaskInvPixel=0,weight_c=0.5,weight_n=1 ):
     a_mask = np.zeros((ny,nx),dtype=bool)  # initialisation du masque d'extraction
@@ -142,9 +144,11 @@ class dataset:
             self._X = self._trainingset['X']
             self._yt = self._trainingset['yt']
             self._amask = self._trainingset['amask']
+            self._weights = self._trainingset['weights']
             self._nx = self._trainingset.dims['x']
             self._ny = self._trainingset.dims['y']
             self._n = self._trainingset.dims['index']
+
             self._bmask = self._trainingset['bmask']
             self._cmask = self._trainingset['cmask']
             
@@ -183,10 +187,16 @@ class dataset:
                                        'nmask':(['index','y','x'],self._nmask)},
                                         coords = self._base.coords)  
         self._trainingset.to_netcdf(basename)
+     
+    @property
+    def X_2D(self):
+        X = self._X.expand_dims('canal',3).fillna(0)
+        X = xr.concat((X, X),dim='canal') # l'image d'entrée a 2 canaux  
+        return X
     
     @property
     def X(self):
-        X = self._X.expand_dims('canal',3).fillna(0)   
+        X = self._X.expand_dims('canal',3).fillna(0)
         return X
 
     @property
@@ -198,13 +208,13 @@ class dataset:
     def Xlog(self):
         Xlog = np.log10(self._X)
         Xlog = Xlog.expand_dims('canal',3).fillna(Xlog.mean())
-
         return Xlog
     
     @property
     def Xmasked(self):
         return np.ma.masked_invalid(self._X)
     
+    @property
     def ymasked(self,y=None):
         if y is None:
             y = self._yt
@@ -212,8 +222,9 @@ class dataset:
     
     @property
     def yt(self):
-        yt = self._yt.expand_dims('canal',3).fillna(self._nanval)       
+        yt = self._yt.expand_dims('canal',3).fillna(self._nanval) 
         return yt
+
     
     @property
     def Weights(self):
@@ -228,6 +239,7 @@ class dataset:
         return ytlog
     
     @property
+
     def Xstandard(self):
         Xstandard = self._X.expand_dims('canal',3)
         ii=0
@@ -269,4 +281,4 @@ if __name__  == "__main__":
         plt.suptitle(title)
         if SAVE:
             plt.savefig(os.path.join(outdir,title+'.png'))
-        
+

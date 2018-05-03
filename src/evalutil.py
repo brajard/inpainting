@@ -217,18 +217,42 @@ def azimuthalAverage(image, center=None):
     radial_prof = tbin / nr
     return radial_prof
 
-def inpainted_region(inputTestName, outputTestName ):
+def inpainted_region(outputTestName, y1='yfinal',nanval=-1e5, forspec=True):
+    """ Cette fonction permet d'extraire la région à completer
+    y1 = 'ypred'
+    y1 = 'yfinal'
+     forspec is a boolean used to specify if the computation is for spectrum computation 
+     or not. In fact, spectrum computation needs the smallest rectangle area containing the inpainted region.
+     whilst the display of the inpainted region shold the mere inpainted region.
+    """
     #outputTestName = '../data/cloud/DatasetNN_cloud.nc'
-    #inputTestName = '../data/cloud/BaseTest_cloud.nc'
-    inputTest = xr.open_dataset(inputTestName)
     outputTest = xr.open_dataset(outputTestName)
-    Amask = np.array(inputTest.amask, dtype = int)
-    chla_finalV = outputTest.yfinal.values.squeeze()
-    CHLAFC = [] ;   # initialisation
-    for i in range(chla_finalV.shape[0]):
-        chla_F = chla_finalV[i,:,:]; amask = Amask[i,:,:]
-        idx = np.argwhere(amask==1) 
+    chla_true = outputTest.yt.values.squeeze()
+    chla_X = outputTest.X.values.squeeze()
+    if y1 == 'ypred':
+        chla_1 = outputTest.ypredict.values.squeeze()
+    elif y1 == 'yfinal':
+        chla_1 = outputTest.yfinal.values.squeeze()
+    else:
+        print('y1 = ypred ou y1=yfinal')
+        
+    CHLAFC = [] ; CHLATC=[]; CHLATRFULL = np.empty_like(chla_X)  # initialisation
+    for i in range(chla_1.shape[0]):
+        amask = np.equal(outputTest.yt[i].values.squeeze(),nanval) 
+        if forspec ==True:
+            chla_F = chla_1[i,:,:] 
+        elif forspec == False:
+            chla_F = chla_1[i,:,:] 
+            chla_F = np.multiply(np.logical_not(amask),chla_F)
+        else:
+            print('forspec is a boolean')
+        chla_T = chla_true[i,:,:]; chla_x = chla_X[i,:,:]
+        # Chla True complet
+        chlaT_full = np.add(np.multiply(amask,chla_x) , np.multiply(np.logical_not(amask),chla_T))
+        CHLATRFULL[i,:,:] = chlaT_full
         # Coordonnées des 4 extremités de la région contenant celle completée
+        amask = np.array(np.logical_not(amask), dtype=int)
+        idx = np.argwhere(amask==1) 
         ind_x_TL = np.argmin(idx[:,0], axis=0); x_TL = idx[ind_x_TL,0]
         ind_x_DR = np.argmax(idx[:,0], axis=0); x_DR = idx[ind_x_DR,0]
         ind_y_TL = np.argmin(idx[:,1], axis=0); y_TL = idx[ind_y_TL,1]
@@ -240,17 +264,18 @@ def inpainted_region(inputTestName, outputTestName ):
         chlaFC = np.empty(shape=(height,width), dtype=float)
         chlaFC = chla_F[x_TL:x_TL+height, y_TL:y_TL+width]
         CHLAFC.append(chlaFC.tolist())
-        CHLAFC = CHLAFC
-    return CHLAFC, chla_finalV
+        chlaTC = copy(chlaFC)
+        chlaTC = chla_T[x_TL:x_TL+height, y_TL:y_TL+width]
+        CHLATC.append(chlaTC.tolist()) 
+    return CHLAFC, CHLATC, chla_1, CHLATRFULL
 
-def power_spectrum(inputTestName, outputTestName, cb=True,plot = True):
+def power_spectrum(outputTestName, cb=True,plot = True):
     """ cb : True if the spectrum is computed on the whole chla_final image
-        cb : False if teh sppectrum is computed only on the restricted area contianing 
+        cb : False if the sppectrum is computed only on the restricted area contianing 
              the inpainted image.
-        plot= True enables the visualization of 20 images sampled randomly.
+        plot = True enables the visualization of 20 images sampled randomly.
         plot = False disables the visualization of 20 images sampled randomly. """
     #outputTestName = '../data/cloud/DatasetNN_cloud.nc'
-    #inputTestName = '../data/cloud/BaseTest_cloud.nc'
     PSD2D = [] ;PSD1D = []
     if cb == True:
         outputTest = xr.open_dataset(outputTestName)
@@ -269,7 +294,7 @@ def power_spectrum(inputTestName, outputTestName, cb=True,plot = True):
             # Calculate the azimuthally averaged 1D power spectrum
             psd1D = azimuthalAverage(psd2D)
             PSD1D.append(psd1D.tolist())   
-        if plot ==True:
+        if plot == True:
             # Visualisation de 20 images tirées aléatoirement 
             nim = 20
             idx = np.random.randint(0,chla_final.shape[0], nim)
@@ -283,8 +308,8 @@ def power_spectrum(inputTestName, outputTestName, cb=True,plot = True):
                 ax[2].set(xlabel='Spatial Frequency', ylabel = "log2(power Spectrum)")
                 
     elif cb == False :   
-        CHLAFC , chla_finalV = inpainted_region(inputTestName, outputTestName)
-        for i in range(chla_finalV.shape[0]):
+        CHLAFC, _, chla_final, _ = inpainted_region(outputTestName, y1='yfinal',nanval=-1e5, forspec=True)
+        for i in range(chla_final.shape[0]):
             chlaFC = np.array(CHLAFC[i])
             # CALCUL DU SPECTRE DE PUISSANCE 
             # Take the fourier transform of the image.
@@ -298,10 +323,10 @@ def power_spectrum(inputTestName, outputTestName, cb=True,plot = True):
             # Calculate the azimuthally averaged 1D power spectrum
             psd1D = azimuthalAverage(psd2D)
             PSD1D.append(psd1D.tolist())   
-        if plot ==True :
+        if plot == True :
             # Visualisation de 20 images tirées aléatoirement
             nim = 20
-            ii = np.random.randint(0,chla_finalV.shape[0], nim)
+            ii = np.random.randint(0,chla_final.shape[0], nim)
             for i,ind in enumerate(ii):
                 fig, ax = plt.subplots(ncols=3)
                 ax[0].imshow(np.array(CHLAFC[ind]))
