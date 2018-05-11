@@ -144,7 +144,7 @@ import xarray as xr
 from baseutil import dataset, weights_mask
 
 alltestname = ['BaseTest_Cloud1.nc','BaseTest_Clouds.nc','BaseTest_Square1.nc','BaseTest_Squares.nc']
-#alltestname = ['base_validation_1cloud.nc', 'base_validation_multiple_clouds.nc', 'base_validation_1square.nc','base_validation_multiple_squares.nc']
+#allvalidname = ['dataset_clouds_weights_bin_1cloud.nc', ]
 ## DATA DIRECTORY
 AllInputDs = ["cl1", "cl+", "sq1", "sq+"]              # cl1 : cloud ; sq1: nauge carré ; sq2 : nuage carré centré
 allPattern = ['cloud1','clouds','square1','squares'];  # list of the cloud's patterns

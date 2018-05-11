@@ -14,8 +14,8 @@ from keras.layers.convolutional import Conv2DTranspose,Conv2D
 from keras.layers.core import Activation
 from keras.layers import MaxPooling2D, concatenate, Input
 
-def get_model_4layers(img_rows=64,img_cols=64,img_canal=1,filter_number=32,kernel_size=(3,3),activation='tanh',optimizer='adam',padding='same'):
 
+def model_4layers(img_rows=64,img_cols=64,img_canal=2,filter_number=32,kernel_size=(3,3),activation='tanh',optimizer='adam',padding='same'):
     #mettre les inputs
     inputs = Input(shape=(img_rows, img_cols, img_canal))
     #convolution classique 1
@@ -54,9 +54,9 @@ def get_model_4layers(img_rows=64,img_cols=64,img_canal=1,filter_number=32,kerne
     deconv_3 = Conv2DTranspose(filter_number*2 ,kernel_size, strides=(2, 2), padding=padding)(merge_2)
     dact_3 = Activation('relu')(deconv_3)
     #ajouter en input de la couche d'entée
-    merge_3 = concatenate([dact_3, act_2], axis=3)   
-    #merge_3 = dact_3
-    #refaire une convolution avec les deux informations  
+    merge_3 = concatenate([dact_3, act_2], axis=3)   # Avec Skip connection
+    #merge_3 = dact_3                                # Sans Skip connection
+    #Refaire une convolution avec les deux informations  
     deconv_4 = Conv2DTranspose(filter_number, kernel_size, strides=(2, 2), padding=padding)(merge_3)
     dact_4 = Activation('relu')(deconv_4)
     #ajouter en input de la couche d'entée
@@ -67,11 +67,18 @@ def get_model_4layers(img_rows=64,img_cols=64,img_canal=1,filter_number=32,kerne
     dact_5 = Activation(activation)(final)
 
     model = Model(inputs=[inputs], outputs=[dact_5])
-
-    model.compile(optimizer=optimizer, loss=context_mse)
-
     return model
 
+def get_model_4layers1(img_rows=64, img_cols=64, img_canal=2):
+    model = model_4layers(img_rows=64, img_cols=64, img_canal=2)
+    model.compile(optimizer='adadelta', loss=masked_mse)
+    return model
+
+def get_model_4layers2(img_rows=64, img_cols=64, img_canal=2):
+    model = model_4layers(img_rows=64, img_cols=64, img_canal=2)
+    model.compile(optimizer='adadelta', loss=context_mse)
+    return model
+    
 def get_model_3layers(img_rows,img_cols):
     #mettre les inputs
     inputs = Input(shape=(img_rows, img_cols, 1))
@@ -140,13 +147,6 @@ def get_model_2layers(img_rows,img_cols):
     return model
 
 
-def masked_mse(y_true,y_pred):
-    nanval = -1e5
-    isMask = K.equal(y_true,nanval)
-    isMask = 1 - K.cast(isMask,dtype=K.floatx())
-    y_true = y_true*isMask
-    y_pred = y_pred*isMask
-    return losses.mean_squared_error(y_true,y_pred)
 
 def context_mse(y_true,y_pred):
     def loss_w(y_true, y_pred):
@@ -161,5 +161,17 @@ def context_mse(y_true,y_pred):
         mse = K.mean(sq)
         return mse
     return loss_w(y_true,y_pred)
+
+def masked_mse(y_true,y_pred):
+    def classic_loss(y_true,y_pred):
+        nanval = -1e5
+        chla_true, _ = tf.split(y_true,2,3)
+        isMask = K.equal(chla_true,nanval)
+        isMask = 1 - K.cast(isMask,dtype=K.floatx())
+        chla_true = chla_true*isMask
+        y_pred = y_pred*isMask
+        return losses.mean_squared_error(chla_true,y_pred)
+    return classic_loss(y_true,y_pred)
+
 
 
