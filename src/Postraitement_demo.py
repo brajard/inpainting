@@ -9,6 +9,7 @@ import xarray as xr
 import numpy as np
 from evalutil import power_spectrum, test_rmse, test_corrcoef, test_varratio, mask_apply_crop, inpainted_region
 import matplotlib.pyplot as plt
+import sklearn
 
 # CHOIX DU DATASET A TRAITER
 AllInputDs = ["cl1", "sq1", "sq2"] # cl1 : cloud ; sq1: nauge carré ; sq2 : nuage carré centré
@@ -72,7 +73,7 @@ Amask = np.array(inputTest.amask, dtype = int)
 
 index = np.array(outputTest.index).tolist() # Index des images 
 # initialisation des listes 
-RMSE = []; CORRCOEF = []; mevalCrop = []; VARRATIO = []
+RMSE = []; CORRCOEF = []; mevalCrop = []; VARRATIO = []; VARPM=[]; VARTM=[]
 CHLAPMC = []; CHLATMC = []
 for j,ind in enumerate(index):
     ytrue = outputTest.yt[j].values.squeeze()
@@ -86,17 +87,24 @@ for j,ind in enumerate(index):
     # Calcul du rmse par imagette (sur chaque carré imputé)
     ev_rmse = test_rmse(ytrue, ypred, amask=amask, nmask=nmask, dx=2, dy=0, coefC=0.1, coefN=1, cbool=True, cwidth=16, cheight=16 )
     RMSE.append(ev_rmse)
+#    # Calcul du R2
+#    r2 = sklearn.metrics.r2_score(ytrue, ypred)
+#    R2.append(r2)
     # Calcul du coef de correlation (sur chaque carré imputé)
     corr_coef = test_corrcoef(ytrue,ypred)
     CORRCOEF.append(corr_coef)
     # Calcul du rapport de variance
-    varratio, _, _ = test_varratio(ytrue, ypred, bool1=False)
+    varratio, vpm, vtm = test_varratio(ytrue, ypred, bool1=False)
     VARRATIO.append(varratio)
+    VARPM.append(vpm)
+    VARTM.append(vtm)
     # Récuperation des valeurs prédites (completées)
     _, _, ytr_mc, ypr_mc  = mask_apply_crop(ytrue, ypred, cwidth=16, cheight=16, cb=True)
     if ypr_mc.shape[0]>0:
             CHLAPMC.extend(ypr_mc)
             CHLATMC.extend(ytr_mc)
+            
+R2_global = sklearn.metrics.r2_score(np.array(CHLATMC,dtype=float),np.array(CHLAPMC,dtype=float))
 
 # Sauvegarde des données   
 np.save(os.path.join(datadir,rmseFileName), np.array(RMSE))
@@ -121,6 +129,38 @@ plt.hist(c, bins=300, alpha=0.5)
 plt.xlim(-0.10, 0.10); #plt.ylim(-1.6, 0.2)
 plt.xlabel('Error chlaPred-ChlaTrue',fontsize=14)
 plt.ylabel('Frequency',fontsize=14)
+
+# %% VISUALISATION DE RMSE, RAPPORT DE VARIANCE, VARIANCES REELLES & PREDITES
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+path = 'F:\share\synthese\cloud1'
+
+#### 3°) Histogramme des RMSE
+rmse = np.load(os.path.join(path,'clouds_1cloud_rmse_cloud.npy'))
+plt.figure()
+plt.hist(rmse,bins=30, alpha=0.5)
+plt.xlabel('RMSE de chaque region completée')
+plt.ylabel('Frequence')
+# Recherche des regions completées ayant des fort RMSE
+ind = np.argwhere(rmse>0.0003)
+ 
+
+#### 5°) Scatter plot des variances
+vpm = np.load(os.path.join(path,'clouds_1cloud_varRatio_cloud.npy'))
+vtm = np.load(os.path.join(path,'clouds_1cloud_varRatio_cloud.npy'))
+plt.figure()
+plt.scatter(vtm,vpm, c='black')
+plt.xlabel('Variance de Chla true de la region', fontsize=14)
+plt.ylabel('Variance de Chla predit de la region à completer', fontsize=14)
+
+#### 4°) Histogramme des rapports de variance
+varratio = np.load(os.path.join(path,'clouds_1cloud_varRatio_cloud.npy'))
+plt.figure()
+plt.hist(varratio, bins=30, alpha=0.5)
+plt.xlabel('Rapport de variance de chaque region completée')
+plt.ylabel('Frequence')
+
 
 # %% Calcul du spectre de puissance et Visualisation
 PSD2D, PSD1D = power_spectrum(outputTestName, cb=True, plot = True)
