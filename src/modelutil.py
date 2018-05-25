@@ -15,7 +15,7 @@ from keras.layers.core import Activation
 from keras.layers import MaxPooling2D, concatenate, Input
 
 
-def model_4layers(img_rows=64,img_cols=64,img_canal=2,filter_number=32,kernel_size=(3,3),activation='tanh',optimizer='adam',padding='same'):
+def model_4layers(img_rows=64,img_cols=64,img_canal=2,filter_number=32,kernel_size=(3,3),activation='relu',optimizer='adam',padding='same'):
     #mettre les inputs
     inputs = Input(shape=(img_rows, img_cols, img_canal))
     #convolution classique 1
