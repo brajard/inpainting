@@ -135,76 +135,6 @@ for icode, inputds in enumerate(AllInputDs):
             
             print(count); count +=1
 
-#change  the trainingset name  if necessary
-trainingname = 'training-small.nc'
-
-outdir = '../figures/examples'
-
-#data directory
-datadir = '../data'
-
-ds = dataset(basename=os.path.join(datadir, trainingname))
-
-#%%
-#for unknown reasons, it seems to work better if dataset is instaciated
-# before importing keras
-from modelutil import get_model_4layers
-
-# name of the neural networks
-name = 'model_4layers'
-
-X_train, X_test, yt_train, yt_test = train_test_split(ds.X, ds.yt, test_size=0.2)
-X_test, X_valid, yt_test, yt_valid =  train_test_split(X_test, yt_test, test_size=0.5)
-
-#%%
-#dimension of input data
-img_rows, img_cols, img_canal = X_train.shape[1:4]
-
-make_model = get_model_4layers(img_rows, img_cols, img_canal)
-print(make_model.summary())
-#%%
-history = make_model.fit(X_train, yt_train, validation_data=(X_valid,yt_valid), epochs=50,batch_size=10,shuffle=True)
-print(history.history.keys())
-
-import xarray as xr
-#change  the trainingset name  if necessary
-trainingname = 'base_clouds_new.nc'
-
-outdir = '../figures/examples'
-
-#data directory
-datadir = '/net/argos/data/parvati/arimoux/share/train_bases/'
-
-ds = dataset(basename=os.path.join(datadir, trainingname))
-
-#%%
-#for unknown reasons, it seems to work better if dataset is instaciated
-# before importing keras
-from modelutil import get_model_4layers
-
-# name of the neural networks
-name = 'model_4layers_clouds_log_weights_fully_connected'
-
-X_bin = xr.concat((ds.Xlog, ds.bmask),dim='canal')
-
-#X_train, X_test, yt_train, yt_test = train_test_split(ds.Xlog, ds.ytlog, test_size=0.2)
-#X_train, X_test, yt_train, yt_test = train_test_split(X_bin, ds.ytlog, test_size=0.2)
-
-X_train, X_test, yt_train, yt_test = train_test_split(ds.Xlog, ds.ytlog_weighted, test_size=0.2)
-#X_train, X_test, yt_train, yt_test = train_test_split(X_bin, ds.ytlog_weighted, test_size=0.2)
-
-X_test, X_valid, yt_test, yt_valid =  train_test_split(X_test, yt_test, test_size=0.5)
-
-#%%
-#dimension of input data
-img_rows, img_cols, img_canal = X_train.shape[1:4]
-
-make_model = get_model_4layers(img_rows, img_cols, img_canal)
-print(make_model.summary())
-#%%
-history = make_model.fit(X_train, yt_train, validation_data=(X_valid,yt_valid), epochs=50,batch_size=10,shuffle=True)
-print(history.history.keys())
-
 # %% TEST PHASE
 import os
 import numpy as np
@@ -214,7 +144,7 @@ import xarray as xr
 from baseutil import dataset, weights_mask
 
 alltestname = ['BaseTest_Cloud1.nc','BaseTest_Clouds.nc','BaseTest_Square1.nc','BaseTest_Squares.nc']
-#alltestname = ['base_validation_1cloud.nc', 'base_validation_multiple_clouds.nc', 'base_validation_1square.nc','base_validation_multiple_squares.nc']
+#allvalidname = ['dataset_clouds_weights_bin_1cloud.nc', ]
 ## DATA DIRECTORY
 AllInputDs = ["cl1", "cl+", "sq1", "sq+"]              # cl1 : cloud ; sq1: nauge carré ; sq2 : nuage carré centré
 allPattern = ['cloud1','clouds','square1','squares'];  # list of the cloud's patterns

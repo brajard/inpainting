@@ -8,63 +8,142 @@ modified by A.Rimoux & M.Kouassi
 
 from keras import losses
 import keras.backend as K
+import tensorflow as tf
 from keras.models import Model
 from keras.layers.convolutional import Conv2DTranspose,Conv2D
-from keras.layers.core import Activation
+from keras.layers.core import Activation, Dense
 from keras.layers import MaxPooling2D, concatenate, Input
-from sklearn.metrics import mean_squared_error as rmse1
-import numpy as np
 
-def get_model_4layers(img_rows,img_cols):
+def get_model_4layers(img_rows=64,img_cols=64,img_canal=1,filter_number=32,kernel_size=(3,3),activation='linear',optimizer='adam',padding='same'):
     #mettre les inputs
-    inputs = Input(shape=(img_rows, img_cols, 1))
+    inputs = Input(shape=(img_rows, img_cols, img_canal))
     #convolution classique 1
-    conv_1 = Conv2D(16, (7, 7), strides=(1, 1), padding='same')(inputs)
+    conv_1 = Conv2D(filter_number, kernel_size, strides=(1, 1), padding=padding)(inputs)
     act_1 = Activation('relu')(conv_1)
     #pooling 64->32
     pl_1=MaxPooling2D((2, 2), strides=(2, 2))(act_1)
     #convolution classique 2
-    conv_2 = Conv2D(32, (3, 3), strides=(1, 1), padding='same')(pl_1)
+    conv_2 = Conv2D(filter_number*2, kernel_size, strides=(1, 1), padding=padding)(pl_1)
     act_2 = Activation('relu')(conv_2)
     #pooling 32->16
     pl_2=MaxPooling2D((2, 2), strides=(2, 2))(act_2)
     #convolution classique 3
-    conv_3 = Conv2D(64, (3, 3), strides=(1, 1), padding='same')(pl_2)
+    conv_3 = Conv2D(filter_number*4, kernel_size, strides=(1, 1), padding=padding)(pl_2)
     act_3 = Activation('relu')(conv_3)
     #pooling 16->8
     pl_3=MaxPooling2D((2, 2), strides=(2, 2))(act_3)
     #convolution classique 4
-    conv_4 = Conv2D(128, (3, 3), strides=(1, 1), padding='same')(pl_3)
+    conv_4 = Conv2D(filter_number*8, kernel_size, strides=(1, 1), padding=padding)(pl_3)
     act_4 = Activation('relu')(conv_4)
     #pooling 8->4
     pl_4=MaxPooling2D((2, 2), strides=(2, 2))(act_4)   
+    #Fully-connected layer
+    bottleneck=Dense(16, activation='relu')(pl_4)
     #deconvolution classique 1
-    deconv_1 = Conv2DTranspose(128, (3, 3), strides=(2, 2), padding='same')(pl_4)
+    deconv_1 = Conv2DTranspose(filter_number*8, kernel_size, strides=(2, 2), padding=padding)(bottleneck)
     dact_1 = Activation('relu')(deconv_1)
     #ajouter en input de la couche d'entée
     merge_1 = concatenate([dact_1, act_4], axis=3)   
+    #merge_1 = dact_1
     #refaire une convolution avec les deux informations  
-    deconv_2 = Conv2DTranspose(64, (3, 3), strides=(2, 2), padding='same')(merge_1)
+    deconv_2 = Conv2DTranspose(filter_number*4, kernel_size, strides=(2, 2), padding=padding)(merge_1)
     dact_2 = Activation('relu')(deconv_2)
     #ajouter en input de la couche d'entée
     merge_2 = concatenate([dact_2, act_3], axis=3)   
+    merge_2 = dact_2
     #refaire une convolution avec les deux informations  
-    deconv_3 = Conv2DTranspose(32 ,(3, 3), strides=(2, 2), padding='same')(merge_2)
+    deconv_3 = Conv2DTranspose(filter_number*2 ,kernel_size, strides=(2, 2), padding=padding)(merge_2)
     dact_3 = Activation('relu')(deconv_3)
     #ajouter en input de la couche d'entée
-    merge_3 = concatenate([dact_3, act_2], axis=3)   
-    #refaire une convolution avec les deux informations  
-    deconv_4 = Conv2DTranspose(16, (3, 3), strides=(2, 2), padding='same')(merge_3)
+    merge_3 = concatenate([dact_3, act_2], axis=3)   # Avec Skip connection
+    #merge_3 = dact_3                                # Sans Skip connection
+    #Refaire une convolution avec les deux informations  
+    deconv_4 = Conv2DTranspose(filter_number, kernel_size, strides=(2, 2), padding=padding)(merge_3)
     dact_4 = Activation('relu')(deconv_4)
     #ajouter en input de la couche d'entée
     merge_4 = concatenate([dact_4, inputs], axis=3) 
+    #merge_4 = dact_4
     #refaire une convolution avec les deux informations    
-    final = Conv2D(1, (3, 3), strides=(1, 1), padding='same')(merge_4)
-    dact_5 = Activation('relu')(final)
+    final = Conv2D(1, kernel_size, strides=(1, 1), padding=padding)(merge_4)
+    dact_5 = Activation(activation)(final)
 
     model = Model(inputs=[inputs], outputs=[dact_5])
+    return model
 
+def get_model_4layers1(img_rows=64, img_cols=64, img_canal=2):
+    model = get_model_4layers(img_rows=64, img_cols=64, img_canal=2)
     model.compile(optimizer='adadelta', loss=masked_mse)
+    return model
+
+def get_model_4layers2(img_rows=64, img_cols=64, img_canal=2):
+    model = get_model_4layers(img_rows=64, img_cols=64, img_canal=2)
+    model.compile(optimizer='adadelta', loss=context_mse)
+    return model
+    
+def get_model_5layers(img_rows=64,img_cols=64,img_canal=1,filter_number=32,kernel_size=(3,3),activation='tanh',optimizer='adam',padding='same'):
+
+    #mettre les inputs
+    inputs = Input(shape=(img_rows, img_cols, img_canal))
+    #convolution classique 1
+    conv_1 = Conv2D(filter_number, kernel_size, strides=(1, 1), padding=padding)(inputs)
+    act_1 = Activation('relu')(conv_1)
+    #pooling 64->32
+    pl_1=MaxPooling2D((2, 2), strides=(2, 2))(act_1)
+    #convolution classique 2
+    conv_2 = Conv2D(filter_number*2, kernel_size, strides=(1, 1), padding=padding)(pl_1)
+    act_2 = Activation('relu')(conv_2)
+    #pooling 32->16
+    pl_2=MaxPooling2D((2, 2), strides=(2, 2))(act_2)
+    #convolution classique 3
+    conv_3 = Conv2D(filter_number*4, kernel_size, strides=(1, 1), padding=padding)(pl_2)
+    act_3 = Activation('relu')(conv_3)
+    #pooling 16->8
+    pl_3=MaxPooling2D((2, 2), strides=(2, 2))(act_3)
+    #convolution classique 4
+    conv_4 = Conv2D(filter_number*8, kernel_size, strides=(1, 1), padding=padding)(pl_3)
+    act_4 = Activation('relu')(conv_4)
+    #pooling 8->4
+    pl_4=MaxPooling2D((2, 2), strides=(2, 2))(act_4)   
+    #convolution classique 5
+    conv_5 = Conv2D(filter_number*8, kernel_size, strides=(1, 1), padding=padding)(pl_4)
+    act_5 = Activation('relu')(conv_5)
+    #pooling 4->2
+    pl_5=MaxPooling2D((2, 2), strides=(2, 2))(act_5)      
+    #deconvolution classique 1
+    deconv_1 = Conv2DTranspose(filter_number*8, kernel_size, strides=(2, 2), padding=padding)(pl_5)
+    dact_1 = Activation('relu')(deconv_1)
+    #ajouter en input de la couche d'entée
+    merge_1 = concatenate([dact_1, act_5], axis=3)   
+    #merge_1 = dact_1
+    #refaire une convolution avec les deux informations  
+    deconv_2 = Conv2DTranspose(filter_number*4, kernel_size, strides=(2, 2), padding=padding)(merge_1)
+    dact_2 = Activation('relu')(deconv_2)
+    #ajouter en input de la couche d'entée
+    merge_2 = concatenate([dact_2, act_4], axis=3)   
+    merge_2 = dact_2
+    #refaire une convolution avec les deux informations  
+    deconv_3 = Conv2DTranspose(filter_number*2 ,kernel_size, strides=(2, 2), padding=padding)(merge_2)
+    dact_3 = Activation('relu')(deconv_3)
+    #ajouter en input de la couche d'entée
+    merge_3 = concatenate([dact_3, act_3], axis=3)   
+    #merge_3 = dact_3
+    #refaire une convolution avec les deux informations  
+    deconv_4 = Conv2DTranspose(filter_number, kernel_size, strides=(2, 2), padding=padding)(merge_3)
+    dact_4 = Activation('relu')(deconv_4)
+    #ajouter en input de la couche d'entée
+    merge_4 = concatenate([dact_4, act_2], axis=3) 
+    #merge_4 = dact_4
+    #refaire une convolution avec les deux informations  
+    deconv_5 = Conv2DTranspose(filter_number, kernel_size, strides=(2, 2), padding=padding)(merge_4)
+    dact_5 = Activation('relu')(deconv_5)
+    #ajouter en input de la couche d'entée
+    merge_5 = concatenate([dact_5, inputs], axis=3) 
+    final = Conv2D(1, kernel_size, strides=(1, 1), padding=padding)(merge_5)
+    dact_6 = Activation(activation)(final)
+
+    model = Model(inputs=[inputs], outputs=[dact_6])
+
+    model.compile(optimizer=optimizer, loss=context_mse)
 
     return model
 
@@ -136,112 +215,31 @@ def get_model_2layers(img_rows,img_cols):
     return model
 
 
+
+def context_mse(y_true,y_pred):
+    def loss_w(y_true, y_pred):
+        chla_true, weights = tf.split(y_true,2,3)
+        chla_pred1 = y_pred
+        nanval = -1e5
+        isMask = K.equal(chla_true,nanval)
+        isMask = 1 - K.cast(isMask,dtype=K.floatx())
+        chla_true = chla_true*isMask
+        chla_pred1 = chla_pred1*isMask
+        sq = K.square(tf.subtract(chla_pred1,chla_true))* weights
+        mse = K.mean(sq)
+        return mse
+    return loss_w(y_true,y_pred)
+
 def masked_mse(y_true,y_pred):
-    nanval = -1e5
-    isMask = K.equal(y_true,nanval)
-    isMask = 1 - K.cast(isMask,dtype=K.floatx())
-    y_true = y_true*isMask
-    y_pred = y_pred*isMask
-    return losses.mean_squared_error(y_true,y_pred)
+    def classic_loss(y_true,y_pred):
+        nanval = -1e5
+        chla_true, _ = tf.split(y_true,2,3)
+        isMask = K.equal(chla_true,nanval)
+        isMask = 1 - K.cast(isMask,dtype=K.floatx())
+        chla_true = chla_true*isMask
+        y_pred = y_pred*isMask
+        return losses.mean_squared_error(chla_true,y_pred)
+    return classic_loss(y_true,y_pred)
 
-def mask_apply(y_true, y_pred):
-    """ Application du masque pour travailler uniquement sur 
-    le carré imputé par le réseau de neurone profond.
-    y_true_m et y_pred_m sont uniquement le carré ou la forme imputée 
-    par le reseau de neurone profond. 
-    y_true et y_pred sont le carré ou la forme imputée 
-    par le reseau de neurone profond , entouré par zero pour le reste de l'imagette."""
-    nanval = -1e5
-    # Réduction de dimension un array 2d (64*64)
-    y_true.shape ; y_true = np.squeeze(y_true)  
-    y_pred.shape; y_pred = np.squeeze(y_pred)
-    # Définition et binarisation du masque
-    isMask = np.empty_like(y_true)
-    isMask[y_true == nanval] = 0
-    isMask[y_true != nanval] = 1
-    # Application du masque sur les y_true et y_pred
-    y_true = y_true * isMask;
-    y_pred = y_pred * isMask;
-    y_true_m = y_true[y_true != 0]
-    y_pred_m = y_pred[y_true != 0]
-    return y_true, y_pred, y_true_m, y_pred_m
 
-def mask_apply_crop(y_true, y_pred, cwidth, cheight, cb):
-    """ Cette fonction permet de selectionner les ytrue et ypred qu'on 
-    veut selon la position dans l'image du carré dans l'image.
-    cheight : est la hauteur à prendre ou pas  en compte.
-    cwidth :  est la largeur à prendre ou pas en compte.
-    cb : booléen : if [True : crop extérieur] et [False : crop intérieur]"""
-    nanval = -1e5
-    # Définition et binarisation du masque
-    isMask = np.empty_like(y_true)
-    isMask[y_true == nanval] = 0
-    isMask[y_true != nanval] = 1
-    isMask = np.squeeze(isMask) 
-    # Reduction de dimension de (64*64*1) à (64*64)
-    isMask = np.squeeze(isMask) 
-    y_true = np.squeeze(y_true)
-    y_pred = np.squeeze(y_pred)
-    # Mask de selection des y true à plotter
-    if (cb == True):
-        bigmask = np.zeros(shape=(64,64))
-        bigmask[cwidth:-cwidth, cheight:-cheight] = 1  
-        isMask1 = isMask * bigmask
-    elif (cb == False):
-        bigmask = np.ones(shape=(64,64))
-        bigmask[cwidth:-cwidth, cheight:-cheight] = 0  
-        isMask1 = isMask * bigmask   
-    # Application du masque sur 
-    y_true = y_true * isMask1
-    y_pred = y_pred * isMask1
-    y_true_m = y_true[y_true != 0]
-    y_pred_m = y_pred[y_true != 0]
-    return y_true, y_pred, y_true_m, y_pred_m
 
-def test_masked_mse(y_true,y_pred):
-    """calcul du loss par root mean square (sklearn)"""
-    ytr, yp, y_tr_m, y_pr_m = mask_apply(y_true,y_pred)
-    mseLoss = rmse1(ytr,yp)
-    return mseLoss
-
-def test_masked_corrcoef(y_true,y_pred):
-    """calcul du coefficient de correlation entre chla predict et chla true 
-    du carré imputé par le reseau de neurones profond. """
-    ytr, yp, y_tr_m, y_pr_m = mask_apply(y_true,y_pred)
-    CorrCoef = np.corrcoef(y_tr_m, y_pr_m, bias=True)[0][1]
-    return CorrCoef
-
-def test_pixel_masked_loss(y_true, y_pred):
-    ytrue, ypred, ytrue_m, ypred_m = mask_apply(y_true,y_pred)
-    i = np.where(ytrue != 0)
-    index_dim = np.shape(i)
-    i_center = int(index_dim[1]/2) # indice de l'indice central du mask
-    b = np.subtract(ytrue, ypred)
-    # pixel central
-    ix_center = i[0][i_center]
-    iy_center = i[1][i_center]
-    chla_center = b[ix_center,iy_center]
-
-    # pixel central supérieur
-    ix_up = i[0][0]
-    chla_upcenter = b[ix_up,iy_center]
-
-    # pixel central inférieur
-    ix_down = i[0][-1]
-    chla_DC = b[ix_down,iy_center]
-
-    # pixel central gauche
-    iy_left = i[1][0]
-    chla_LC = b[ix_center,iy_left]
-
-    # pixel central droit
-    iy_right = i[1][-1]
-    chla_RC = b[ix_center,iy_right]
-
-    # pixel  des coins 
-    chla_UL = b[ix_up,iy_left]       # coin supérieur gauche
-    chla_UR = b[ix_up,iy_right]      # coin supérieur droit
-    chla_DL = b[ix_down, iy_left]    # coin inférieur gauche
-    chla_DR = b[ix_down, iy_right]   # coin inférieur droit 
-    
-    return chla_center, chla_UL, chla_UR, chla_DL, chla_DR

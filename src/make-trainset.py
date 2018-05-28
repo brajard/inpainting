@@ -4,7 +4,7 @@
 script to create the training set
 @author: Julien Brajard
 """
-from baseutil import dataset, make_mask
+from baseutil import dataset, make_mask_squares,make_mask_clouds
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -21,17 +21,28 @@ basename = 'medchl-small.nc'
 trainingname = 'training-small.nc'
 
 # option for masking
-mfun = make_mask #masking function (in baseutil)
+mfun = make_mask_clouds #masking function (in baseutil)
 margs = \
-   {'msize':8, #size of the mask
-    'nmask':1} #number of mask per image
+   {'delta':2, #add a neighbour mask which is delta pixels large
+    'lim':5, #limit the mask position from the edges
+    'msize':8, #size max of the mask
+    'nmask':20, #number of mask per image
+    'min_MaskInvPixel':0, #number of pixels overlapping with NaN values
+    'weight_c':0.1, #weight on the mask
+    'weight_n':1} #weight on the vicinity of the mask
 
+#%%
 
-
-#Make the dateset
+#Make the dataset
 ds = dataset(srcname = os.path.join(datadir,basename) , overwrite = True)
+#%%
+
 ds.masking(mfun = mfun, **margs)
+#%%
+
 ds.savebase(os.path.join(datadir,trainingname))
+#%%
+
 
 #plot some random images
 PLOT = True
