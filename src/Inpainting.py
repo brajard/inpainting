@@ -120,4 +120,3 @@ for xx,lossf in enumerate(allLossf): # boucle sur les 2 types de fonction de cou
     plt.savefig(os.path.join(figdir,title+modelsName+'.png'))
     
     print(count); count +=1
-
