@@ -8,25 +8,23 @@ classes and utils for dealing with training dataset
 import os
 import xarray as xr
 import numpy as np
-
 from random import randint
-import skimage
 import skimage.morphology
 from copy import copy
+import numpy.ma as ma
 
 SAVE = False
-
 def nan_counter(ny,nx,dst,ind1, delta, lim, msize, min_MaskInvPixel):
     x = randint(lim,(nx-(msize+2*delta+lim)))
     y = randint(lim,(ny-(msize+2*delta+lim)))
     pix_max = np.array(dst.chla[ind1,y:y+msize, x:x+msize], dtype='float')
     a = np.reshape(pix_max, (1, msize*msize))
     max_MaskInvPixel = np.sum(np.isnan(a))
-    return max_MaskInvPixel, x,y
+    return max_MaskInvPixel, x, y
 
-def make_mask_squares(ny,nx,dst,ind1, delta=2, lim=0, msize=8, nmask = 5, min_MaskInvPixel=0,weight_c=0.5,weight_n=1 ):
+def make_mask_squares(ny,nx,dst,ind1, delta=2, lim=0, msize=8, nmask = 5, min_MaskInvPixel=0,weight_c=0.1,weight_n=1 ):
     a_mask = np.zeros((ny,nx),dtype=bool)  # initialisation du masque d'extraction
-    c_mask = np.ones((ny,nx),dtype=bool)   # initialisation du masque contextuel
+    c_mask = np.zeros((ny,nx),dtype=bool)   # initialisation du masque contextuel
     n_mask = np.zeros((ny,nx),dtype=bool)  # initialisation du masque de voisinage
     weights = np.empty_like(a_mask, dtype=float) # initialisation du masque de poids
     k=0
@@ -36,23 +34,33 @@ def make_mask_squares(ny,nx,dst,ind1, delta=2, lim=0, msize=8, nmask = 5, min_Ma
         while (max_MaskInvPixel > min_MaskInvPixel):
             max_MaskInvPixel,x,y = nan_counter(ny,nx,dst,ind1, delta, lim, msize, min_MaskInvPixel)
         a_mask[y:(y+random_size), x:(x+random_size)] = True
-        c_mask[(y-delta):(y+random_size+delta), (x-delta):(x+random_size+delta)] = False
-        # Construction du masque de voisinage
-        n_mask[(y-delta):(y+random_size+delta), (x-delta):(x+random_size+delta)] = True
-        n_mask[y:(y+random_size), x:(x+random_size)] = False
-        # Construction du masque de poids
-        weights[np.where(a_mask==True)]=weight_c
-        weights[np.where(n_mask==True)]=weight_n
-        weights[np.where(c_mask==True)]=0
         k=k+1
+    # Construction du masque contextuel par dilatation du amask
+    if (delta==0):
+        abc = copy(a_mask)
+    elif (delta==1):
+        abc=skimage.morphology.dilation(a_mask, shift_x=True, shift_y=True)
+    elif (delta>1):
+        abc=skimage.morphology.dilation(a_mask, shift_x=True, shift_y=True)
+        for i in range(delta-1):
+            abc=skimage.morphology.dilation(abc,shift_x=True, shift_y=True)     
+    c_mask = np.add(c_mask,abc)
+    c_mask = np.logical_not(c_mask)
+    # Construction du masque de voisinage
+    n_mask[(y-delta):(y+random_size+delta), (x-delta):(x+random_size+delta)] = True
+    n_mask[y:(y+random_size), x:(x+random_size)] = False
+    # Construction du masque de poids
+    weights[np.where(a_mask==True)]=weight_c
+    weights[np.where(n_mask==True)]=weight_n
+    weights[np.where(c_mask==True)]=0
     return a_mask, c_mask, n_mask, weights
 
 def make_mask_clouds(ny,nx,dst,ind1, delta=2, lim=0, msize=8, nmask = 5, min_MaskInvPixel=0,weight_c=0.5,weight_n=1 ):
     nanval=-1e5
-    dd=xr.open_dataarray("../data/data_mask.nc")
-    a_mask = np.zeros((ny,nx),dtype=bool)  # initialisation du masque d'extraction
-    c_mask_inv = np.zeros((ny,nx),dtype=bool)   # initialisation du masque contextuel
-    n_mask = np.zeros((ny,nx),dtype=bool)  # initialisation du masque de voisinage
+    dd=xr.open_dataarray("../data/data/data_mask.nc")
+    a_mask = np.zeros((ny,nx),dtype=bool)        # initialisation du masque d'extraction
+    c_mask_inv = np.zeros((ny,nx),dtype=bool)    # initialisation du masque contextuel
+    n_mask = np.zeros((ny,nx),dtype=bool)        # initialisation du masque de voisinage
     weights = np.empty_like(a_mask, dtype=float) # initialisation du masque de poids
     cloud_mask=np.zeros((ny,nx),dtype=bool)
     k=0
@@ -62,21 +70,25 @@ def make_mask_clouds(ny,nx,dst,ind1, delta=2, lim=0, msize=8, nmask = 5, min_Mas
         while (max_MaskInvPixel > min_MaskInvPixel):
             h = randint(0,np.shape(dd)[0]-1)
             cloud_mask=dd.rename({'dim_1': 'y','dim_2': 'x'})[h,:,:]
-            # Construction du masque contextuel par dilatation du amask
-            if (delta==0):
-                abc = copy(cloud_mask)
-            elif (delta==1):
-                abc=skimage.morphology.dilation(cloud_mask, shift_x=True, shift_y=True)
-            elif (delta>1):
-                abc=skimage.morphology.dilation(cloud_mask, shift_x=True, shift_y=True)
-                for i in range(delta-1):
-                    abc=skimage.morphology.dilation(abc,shift_x=True, shift_y=True) 
+    
             pix = dst.chla.fillna(nanval)[ind1,:,:]
-            a = pix.where(abc==True)
+            a = pix.where(cloud_mask==True)
             max_MaskInvPixel = np.sum(np.where(a<0))
-        a_mask = a_mask+copy(cloud_mask)
-        c_mask_inv = c_mask_inv+abc
+            
+        a_mask = np.add(a_mask,copy(cloud_mask))
         k=k+1
+    # Construction du masque contextuel par dilatation du amask
+    if (delta==0):
+        abc = copy(a_mask)
+    elif (delta==1):
+        abc = copy(a_mask)
+        abc=skimage.morphology.dilation(abc, shift_x=True, shift_y=True)
+    elif (delta>1):
+        abc = copy(a_mask)
+        abc=skimage.morphology.dilation(abc, shift_x=True, shift_y=True)
+        for i in range(delta-1):
+            abc=skimage.morphology.dilation(abc,shift_x=True, shift_y=True)     
+    c_mask_inv = np.add(c_mask_inv,abc)
     c_mask = np.logical_not(c_mask_inv)
     # Construction du masque de voisinage
     n_mask = np.add(a_mask, c_mask)
@@ -88,23 +100,27 @@ def make_mask_clouds(ny,nx,dst,ind1, delta=2, lim=0, msize=8, nmask = 5, min_Mas
     return a_mask, c_mask, n_mask, weights
 
 def weights_mask(inputds,weightBaseName,weight_c,weight_n):
-    #inputds = '../data/cloud/BaseTest_cloud.nc'
+    #inputds = '../data/cloud/cloud1/BaseTest_Cloud1.nc'
     #weightBaseName = '../data/cloud/weights_mask_cloud.nc'
     ds = xr.open_dataset(inputds)
     am = np.array(ds.amask.values, dtype=int)
     cm = np.array(ds.cmask.values, dtype=int)
     weights = np.empty_like(ds.amask.values, dtype=float)
-    # Construction du masque de voisinage
+    # construction du masque binaire de X
+    X_binary = copy(ds['X']); 
+    X_mask = ma.masked_invalid(X_binary.values)
+    X_binary.values = np.logical_not(X_mask.mask)
+    # Construction du masque de voisinage des regions à compléter
     nm = np.logical_not(np.add(am, cm))
     # Construction du masque de poids
     if np.array_equal(am, np.logical_not(cm)):
-        weights[np.where(am==1)]=weight_c
-        weights[np.where(cm==1)]=0
+        weights[np.where(am==1)] = weight_c
+        weights[np.where(cm==1)] = 0
     else:
         # Construction du masque de poids
-        weights[np.where(am==1)]=weight_c
-        weights[np.where(nm==1)]=weight_n
-        weights[np.where(cm==1)]=0
+        weights[np.where(am==1)] = weight_c
+        weights[np.where(nm==1)] = weight_n
+        weights[np.where(cm==1)] = 0
     # Stockage dans une base de données
     AM = ds['amask']; AM.values = am 
     CM = ds['cmask']; CM.values = cm 
@@ -115,11 +131,15 @@ def weights_mask(inputds,weightBaseName,weight_c,weight_n):
                       'weights':(['index','y','x'],W),
                       'amask':(['index','y','x'],AM),
                       'cmask':(['index','y','x'],CM),
-                      'bmask':(['index','y','x'],ds.bmask),
-                      'nmask':(['index','y','x'],nm)},
+                      'bmask':(['index','y','x'],X_binary),
+                      'nmask':(['index','y','x'],NM)},
                       coords = ds.coords)  
     wds.to_netcdf(weightBaseName)
     return wds
+
+def testBit( x, kth ):
+    return ( x & 1 << kth ) != 0
+
 
 class dataset:
     def __init__(self, srcname = None, basename = None, crop = 0,
@@ -144,13 +164,13 @@ class dataset:
             self._X = self._trainingset['X']
             self._yt = self._trainingset['yt']
             self._amask = self._trainingset['amask']
-            self._weights = self._trainingset['weights']
             self._nx = self._trainingset.dims['x']
             self._ny = self._trainingset.dims['y']
             self._n = self._trainingset.dims['index']
-
             self._bmask = self._trainingset['bmask']
             self._cmask = self._trainingset['cmask']
+            self._landmask = self._trainingset['landmask']
+
             
     def masking(self, mfun=make_mask_squares, **margs):
         self._X = np.ma.masked_invalid(self._base[self._fname])
@@ -159,6 +179,7 @@ class dataset:
         self._cmask = np.zeros(self._yt.shape,dtype=bool) # definition du contextual mask
         self._nmask = np.zeros(self._yt.shape,dtype=bool) # definition du masque du voisinage uniquement
         self._weights =np.zeros(self._yt.shape,dtype=float)
+        self._landmask = testBit(self._base.flags,3)
         self._bmask = ~self._X.mask
         if self._crop>0:
             self._yt = self._yt[:,self._crop:-self._crop,self._crop:-self._crop]
@@ -184,19 +205,14 @@ class dataset:
                                        'bmask':(['index','y','x'],self._bmask),
                                        'cmask':(['index','y','x'],self._cmask),
                                        'weights':(['index','y','x'],self._weights),
-                                       'nmask':(['index','y','x'],self._nmask)},
+                                       'nmask':(['index','y','x'],self._nmask),
+                                       'landmask':(['index','y','x'],self._landmask)},
                                         coords = self._base.coords)  
         self._trainingset.to_netcdf(basename)
-     
-    @property
-    def X_2D(self):
-        X = self._X.expand_dims('canal',3).fillna(0)
-        X = xr.concat((X, X),dim='canal') # l'image d'entrée a 2 canaux  
-        return X
     
     @property
     def X(self):
-        X = self._X.expand_dims('canal',3).fillna(0)
+        X = self._X.expand_dims('canal',3).fillna(0)   
         return X
 
     @property
@@ -208,23 +224,30 @@ class dataset:
     def Xlog(self):
         Xlog = np.log10(self._X)
         Xlog = Xlog.expand_dims('canal',3).fillna(Xlog.mean())
+
         return Xlog
     
     @property
     def Xmasked(self):
         return np.ma.masked_invalid(self._X)
     
-    @property
     def ymasked(self,y=None):
         if y is None:
             y = self._yt
         return np.ma.masked_invalid(y)
     
     @property
+    def ytfull(self):
+        chlaTrue = self._yt.fillna(self._nanval)
+        chlaX = self._X.fillna(0)
+        amask = self._amask
+        ytfull = np.add(np.multiply(np.logical_not(amask),chlaX), np.multiply(amask,chlaTrue))
+        return ytfull
+    
+    @property
     def yt(self):
-        yt = self._yt.expand_dims('canal',3).fillna(self._nanval) 
+        yt = self._yt.expand_dims('canal',3).fillna(self._nanval)       
         return yt
-
     
     @property
     def Weights(self):
@@ -239,7 +262,6 @@ class dataset:
         return ytlog
     
     @property
-
     def Xstandard(self):
         Xstandard = self._X.expand_dims('canal',3)
         ii=0
@@ -248,9 +270,34 @@ class dataset:
             stdImage = self._X[ii,:,:].std()
             Xstandard[ii,:,:,0] = (self._X[ii,:,:]-meanImage)/stdImage
             ii += 1
-      
-        return Xstandard
-    
+            Xexp = self._X.expand_dims('canal',3)
+        Xstandard = (Xexp-np.nanmean(Xexp))/np.nanstd(Xexp)
+        Xstandard_final = Xstandard.fillna(0)
+        return Xstandard_final
+
+    @property
+    def yt_standard(self):
+        yt_exp = self._yt.expand_dims('canal',3)
+        yt_standard = (yt_exp-np.nanmean(yt_exp))/np.nanstd(yt_exp)
+        yt_standard_final = yt_standard.fillna(self._nanval)
+        return yt_standard_final
+
+    @property
+    def Xlog_standard(self):
+        Xlog = np.log10(self._X)
+        Xlogexp = Xlog.expand_dims('canal',3)
+        Xlogstandard = (Xlogexp-np.nanmean(Xlogexp))/np.nanstd(Xlogexp)
+        Xlogstandard_final = Xlogstandard.fillna(0)
+        return Xlogstandard_final
+
+    @property
+    def ytlog_standard(self):
+        ytlog = np.log10(self._yt)
+        ytlog_exp = ytlog.expand_dims('canal',3)
+        ytlog_standard = (ytlog_exp-np.nanmean(ytlog_exp))/np.nanstd(ytlog_exp)
+        ytlog_standard_final = ytlog_standard.fillna(self._nanval)
+        return ytlog_standard_final
+   
     @property
     def bmask(self):
         bmask = self._bmask.expand_dims('canal',3)   
@@ -281,4 +328,4 @@ if __name__  == "__main__":
         plt.suptitle(title)
         if SAVE:
             plt.savefig(os.path.join(outdir,title+'.png'))
-
+        
