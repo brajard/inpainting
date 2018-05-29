@@ -121,6 +121,9 @@ def weights_mask(inputds,weightBaseName,weight_c,weight_n):
     wds.to_netcdf(weightBaseName)
     return wds
 
+def testBit( x, kth ):
+    return ( x & 1 << kth ) != 0
+
 class dataset:
     def __init__(self, srcname = None, basename = None, crop = 0,
                  overwrite=False,fname='chla',nanval=-1e5):
@@ -151,6 +154,8 @@ class dataset:
 
             self._bmask = self._trainingset['bmask']
             self._cmask = self._trainingset['cmask']
+            self._landmask = self._trainingset['landmask']
+
             
     def masking(self, mfun=make_mask_squares, **margs):
         self._X = np.ma.masked_invalid(self._base[self._fname])
@@ -159,6 +164,7 @@ class dataset:
         self._cmask = np.zeros(self._yt.shape,dtype=bool) # definition du contextual mask
         self._nmask = np.zeros(self._yt.shape,dtype=bool) # definition du masque du voisinage uniquement
         self._weights =np.zeros(self._yt.shape,dtype=float)
+        self._landmask = testBit(self._base.flags,3)
         self._bmask = ~self._X.mask
         if self._crop>0:
             self._yt = self._yt[:,self._crop:-self._crop,self._crop:-self._crop]
@@ -184,7 +190,8 @@ class dataset:
                                        'bmask':(['index','y','x'],self._bmask),
                                        'cmask':(['index','y','x'],self._cmask),
                                        'weights':(['index','y','x'],self._weights),
-                                       'nmask':(['index','y','x'],self._nmask)},
+                                       'nmask':(['index','y','x'],self._nmask),
+                                       'landmask':(['index','y','x'],self._landmask)},
                                         coords = self._base.coords)  
         self._trainingset.to_netcdf(basename)
      
@@ -235,21 +242,42 @@ class dataset:
     def ytlog(self):
         ytlog = np.log10(self._yt)
         ytlog = ytlog.expand_dims('canal',3).fillna(self._nanval)
-        
+
         return ytlog
     
     @property
-
     def Xstandard(self):
-        Xstandard = self._X.expand_dims('canal',3)
-        ii=0
-        while (ii<self._n):
-            meanImage = self._X[ii,:,:].mean()
-            stdImage = self._X[ii,:,:].std()
-            Xstandard[ii,:,:,0] = (self._X[ii,:,:]-meanImage)/stdImage
-            ii += 1
+        Xexp = self._X.expand_dims('canal',3)
+        Xstandard = (Xexp-np.nanmean(Xexp))/np.nanstd(Xexp)
+        Xstandard_final = Xstandard.fillna(0)
+
+        return Xstandard_final
+
+    @property
+    def yt_standard(self):
+        yt_exp = self._yt.expand_dims('canal',3)
+        yt_standard = (yt_exp-np.nanmean(yt_exp))/np.nanstd(yt_exp)
+        yt_standard_final = yt_standard.fillna(self._nanval)
       
-        return Xstandard
+        return yt_standard_final
+
+    @property
+    def Xlog_standard(self):
+        Xlog = np.log10(self._X)
+        Xlogexp = Xlog.expand_dims('canal',3)
+        Xlogstandard = (Xlogexp-np.nanmean(Xlogexp))/np.nanstd(Xlogexp)
+        Xlogstandard_final = Xlogstandard.fillna(0)
+
+        return Xlogstandard_final
+
+    @property
+    def ytlog_standard(self):
+        ytlog = np.log10(self._yt)
+        ytlog_exp = ytlog.expand_dims('canal',3)
+        ytlog_standard = (ytlog_exp-np.nanmean(ytlog_exp))/np.nanstd(ytlog_exp)
+        ytlog_standard_final = ytlog_standard.fillna(self._nanval)
+
+        return ytlog_standard_final
     
     @property
     def bmask(self):
