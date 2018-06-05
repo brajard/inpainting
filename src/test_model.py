@@ -34,11 +34,20 @@ model = load_model(os.path.join(datadir,name),
 ypredict = xr.DataArray(model.predict(ds.X),coords=ds.yt.coords)
 
 #generate a combinated image of original & predicted images
+nanval = -1e-5
 isCloud = np.equal(ds.X,0)
 yfinal = (1-isCloud)*ds.X + isCloud*ypredict
+yfinal= yfinal*~ds._landmask+nanval*ds._landmask
 
 #save prediction
-dsout = xr.Dataset({'X':ds.X,'yt':ds.yt,'ypredict':ypredict,'yfinal':yfinal})
+dsout = xr.Dataset({'X':(['index','y','x'],ds._X),
+                    'ytfull':(['index','y','x'],ds._ytfull),
+                    'ypredict':(['index','y','x'],ypredict[:,:,:,0]),
+                    'yfinal':(['index','y','x'],yfinal[:,:,:,0]),
+                    'amask':(['index','y','x'],ds._amask),
+                    'landmask':(['index','y','x'],ds._landmask)},
+                    coords = ds.yt.coords)
+
 dsout.to_netcdf(os.path.join(datadir,outname))
 
 #plot some random images

@@ -10,7 +10,6 @@ import xarray as xr
 import numpy as np
 
 from random import randint
-import skimage
 import skimage.morphology
 from copy import copy
 
@@ -146,12 +145,12 @@ class dataset:
             self._trainingset = xr.open_dataset(basename)
             self._X = self._trainingset['X']
             self._yt = self._trainingset['yt']
+            self._ytfull = self._trainingset['ytfull']
             self._amask = self._trainingset['amask']
             self._weights = self._trainingset['weights']
             self._nx = self._trainingset.dims['x']
             self._ny = self._trainingset.dims['y']
             self._n = self._trainingset.dims['index']
-
             self._bmask = self._trainingset['bmask']
             self._cmask = self._trainingset['cmask']
             self._landmask = self._trainingset['landmask']
@@ -160,6 +159,7 @@ class dataset:
     def masking(self, mfun=make_mask_squares, **margs):
         self._X = np.ma.masked_invalid(self._base[self._fname])
         self._yt = np.ma.masked_invalid(self._base[self._fname])
+        self._ytfull = self._base.chla
         self._amask = np.zeros(self._X.shape,dtype=bool)  # definition du training mask
         self._cmask = np.zeros(self._yt.shape,dtype=bool) # definition du contextual mask
         self._nmask = np.zeros(self._yt.shape,dtype=bool) # definition du masque du voisinage uniquement
@@ -191,6 +191,7 @@ class dataset:
                                        'cmask':(['index','y','x'],self._cmask),
                                        'weights':(['index','y','x'],self._weights),
                                        'nmask':(['index','y','x'],self._nmask),
+                                       'ytfull':(['index','y','x'],self._ytfull),
                                        'landmask':(['index','y','x'],self._landmask)},
                                         coords = self._base.coords)  
         self._trainingset.to_netcdf(basename)
@@ -205,11 +206,6 @@ class dataset:
     def X(self):
         X = self._X.expand_dims('canal',3).fillna(0)
         return X
-
-    @property
-    def X_2D(self):
-        X = self._X.expand_dims('canal',3).fillna(0)
-        X = xr.concat((X, X),dim='canal') # l'image d'entrée a 2 canaux
  
     @property
     def Xlog(self):
@@ -248,7 +244,7 @@ class dataset:
     @property
     def Xstandard(self):
         Xexp = self._X.expand_dims('canal',3)
-        Xstandard = (Xexp-np.nanmean(Xexp))/np.nanstd(Xexp)
+        Xstandard = (Xexp-np.nanmean(self._ytfull))/np.nanstd(self._ytfull)
         Xstandard_final = Xstandard.fillna(0)
 
         return Xstandard_final
@@ -256,7 +252,7 @@ class dataset:
     @property
     def yt_standard(self):
         yt_exp = self._yt.expand_dims('canal',3)
-        yt_standard = (yt_exp-np.nanmean(yt_exp))/np.nanstd(yt_exp)
+        yt_standard = (yt_exp-np.nanmean(self._ytfull))/np.nanstd(self._ytfull)
         yt_standard_final = yt_standard.fillna(self._nanval)
       
         return yt_standard_final
@@ -265,7 +261,7 @@ class dataset:
     def Xlog_standard(self):
         Xlog = np.log10(self._X)
         Xlogexp = Xlog.expand_dims('canal',3)
-        Xlogstandard = (Xlogexp-np.nanmean(Xlogexp))/np.nanstd(Xlogexp)
+        Xlogstandard = (Xlogexp-np.log10(np.nanmean(self._ytfull)))/np.log10(np.nanstd(self._ytfull))
         Xlogstandard_final = Xlogstandard.fillna(0)
 
         return Xlogstandard_final
@@ -274,7 +270,7 @@ class dataset:
     def ytlog_standard(self):
         ytlog = np.log10(self._yt)
         ytlog_exp = ytlog.expand_dims('canal',3)
-        ytlog_standard = (ytlog_exp-np.nanmean(ytlog_exp))/np.nanstd(ytlog_exp)
+        ytlog_standard = (ytlog_exp-np.log10(np.nanmean(self._ytfull)))/np.log10(np.nanstd(self._ytfull))
         ytlog_standard_final = ytlog_standard.fillna(self._nanval)
 
         return ytlog_standard_final
