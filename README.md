@@ -1,4 +1,5 @@
 # Inpainting
+In construction: some parts of the README and the deposit are not up to date.
 
 ## Prerequisites
 Python modules to be installed. Advice : use conda env
@@ -39,6 +40,9 @@ software `ncview`
 
 
 ## Train a first network
+Network based on paper:
+Pathak, D., Krähenbühl, P., Donahue, J., Darrell, T., & Efros, A. A. (n.d.). Context Encoders: Feature Learning by Inpainting. Retrieved from http://people.eecs.berkeley.edu/~pathak/papers/cvpr16.pdf
+
 1) In file `Inpainting.py`:
 - set the `trainingname` to `[TNAME]`
 - set the `name` to the name the neural network has to be saved (denoted `[NETNAME]`)
